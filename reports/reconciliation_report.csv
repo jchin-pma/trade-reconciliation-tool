@@ -1,0 +1,7 @@
+trade_id,symbol,status,field,internal_value,broker_value
+T001,AAPL,OK,-,-,-
+T002,MSFT,MISMATCH,quantity,200,250.0
+T003,GOOGL,OK,-,-,-
+T004,TSLA,MISMATCH,price,248.0,250.0
+T005,AMZN,OK,-,-,-
+T006,NVDA,UNMATCHED — missing from broker,-,-,-
