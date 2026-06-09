@@ -5,9 +5,15 @@ Compares an internal trade book against broker confirms.
 Flags mismatches in quantity or price, and identifies trades
 that appear in one file but not the other.
 
+Modes:
+  python reconcile.py                        # compare two local CSVs
+  python reconcile.py --live                 # fetch Robinhood trades via MCP, then reconcile
+  python reconcile.py --live --after 2026-05-01
+
 Output: printed summary + reports/reconciliation_report.csv
 """
 
+import argparse
 import pandas as pd
 import os
 from datetime import datetime
@@ -136,10 +142,39 @@ def save_report(report: pd.DataFrame, output_path: str):
 
 
 if __name__ == "__main__":
-    INTERNAL = "data/internal_trades.csv"
-    BROKER   = "data/broker_trades.csv"
-    OUTPUT   = "reports/reconciliation_report.csv"
+    parser = argparse.ArgumentParser(description="Trade Reconciliation Tool")
+    parser.add_argument("--internal", default="data/internal_trades.csv",
+                        help="Internal trade book CSV")
+    parser.add_argument("--broker", default="data/broker_trades.csv",
+                        help="Broker confirms CSV (ignored when --live is set)")
+    parser.add_argument("--output", default="reports/reconciliation_report.csv",
+                        help="Output report CSV path")
+    parser.add_argument("--live", action="store_true",
+                        help="Fetch broker data live from Robinhood MCP instead of a CSV")
+    parser.add_argument("--after", default=None,
+                        help="With --live: only fetch trades after this date (YYYY-MM-DD)")
+    args = parser.parse_args()
 
-    report = reconcile(INTERNAL, BROKER)
+    broker_path = args.broker
+
+    if args.live:
+        import os as _os
+        from robinhood_fetch import fetch_orders_via_requests, normalize_order, write_csv
+
+        token = _os.environ.get("ROBINHOOD_TOKEN")
+        if not token:
+            raise SystemExit(
+                "Set the ROBINHOOD_TOKEN environment variable to use --live mode.\n"
+                "When running inside Claude, the robinhood-trading MCP server "
+                "handles authentication automatically."
+            )
+
+        print("Fetching live trades from Robinhood MCP ...")
+        raw = fetch_orders_via_requests(token, args.after)
+        rows = [r for o in raw if (r := normalize_order(o)) is not None]
+        broker_path = "data/broker_trades_live.csv"
+        write_csv(rows, broker_path)
+
+    report = reconcile(args.internal, broker_path)
     print_summary(report)
-    save_report(report, OUTPUT)
+    save_report(report, args.output)
